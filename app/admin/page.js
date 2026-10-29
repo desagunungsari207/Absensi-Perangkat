@@ -41,7 +41,7 @@ export default function Admin(){
     return (
       <div style={{padding:20, maxWidth:400, margin:'0 auto', fontFamily:'sans-serif'}}>
         <h2>Login Admin</h2>
-        <p>Password Default: <b>Ch@dast1936</b></p>
+        <p style={{fontSize:12, color:'#666'}}>Login khusus Kades/Sekdes</p>
         <input type="password" value={passInput} onChange={e=>setPassInput(e.target.value)} placeholder="Password" style={{width:'100%', padding:12, marginBottom:10}}/>
         <button onClick={handleLogin} style={{width:'100%', padding:12, background:'black', color:'white'}}>LOGIN</button>
         <br/><br/><a href="/">Kembali</a>
