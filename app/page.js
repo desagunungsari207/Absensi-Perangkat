@@ -30,7 +30,7 @@ export default function Home() {
         <button onClick={()=>absen('PULANG')} style={{padding:18, background:'#dc2626', color:'white', border:0, borderRadius:10, fontSize:18, fontWeight:'bold'}}>🏠 ABSEN PULANG</button>
       </div>
       <pre style={{marginTop:20, background:'#f5f5f5', padding:12, borderRadius:8, whiteSpace:'pre-wrap'}}>{status || 'Silakan klik absen'}</pre>
-      <div style={{display:'flex', gap:5, marginTop:20}}><a href="/admin" style={{flex:1, textAlign:'center', padding:10, background:'#000', color:'#fff', borderRadius:6, textDecoration:'none'}}>🔑 Admin</a><a href="/setting-bot" style={{flex:1, textAlign:'center', padding:10, background:'#fff', color:'#000', border:'1px solid #000', borderRadius:6, textDecoration:'none'}}>🤖 Bot</a></div>
+      <div style={{textAlign:'center', marginTop:30}}><a href="/admin" style={{fontSize:11, color:'#999', textDecoration:'none'}}>Admin</a></div>
     </div>
   );
 }
