@@ -1,105 +1,161 @@
 "use client";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 const GOOGLE_SHEET_URL = "https://script.google.com/macros/s/AKfycbxRWQ549peyAyad2mVRv1jv8YiNw29s1pQSxxhH5sFW3weEMkXduqtkBv_Hj_vVJ8w9/exec";
 const ADMIN_PASSWORD = "Ch@dast1936";
-const DAFTAR_JABATAN = ["Sekretaris Desa","Kaur Keuangan","Kaur TU dan Umum","Kaur Perencanaan","Kasi Kesejahteraan","Kasi Pemerintahan","Kasi Pelayanan","Kadus Desa","Kadus Cikatomas","Kadus Cilopadang"];
 
-export default function AdminOnline() {
-  const [login,setLogin]=useState(false);
-  const [passInput,setPassInput]=useState("");
-  const [riwayat,setRiwayat]=useState([]);
-  const [devices,setDevices]=useState([]);
-  const [loading,setLoading]=useState(true);
-  const [filter,setFilter]=useState("Semua");
-  const [mounted,setMounted]=useState(false);
+export default function Admin() {
+  const [ready, setReady] = useState(false);
+  const [isLogin, setIsLogin] = useState(false);
+  const [pass, setPass] = useState("");
+  const [absen, setAbsen] = useState([]);
+  const [devices, setDevices] = useState([]);
+  const [msg, setMsg] = useState("Siap");
+  const [filter, setFilter] = useState("Semua");
 
-  const load = async()=>{
-    setLoading(true);
-    try{
-      const r1=await fetch(GOOGLE_SHEET_URL+"?t="+Date.now(), {cache:"no-store"});
-      const d1=await r1.json(); 
-      if(Array.isArray(d1)) setRiwayat(d1);
-      
-      const r2=await fetch(GOOGLE_SHEET_URL+"?action=devices&t="+Date.now(), {cache:"no-store"});
-      const d2=await r2.json(); 
-      if(Array.isArray(d2)) setDevices(d2);
-    }catch(e){ 
-      console.log("Load error", e);
+  useEffect(() => {
+    setReady(true);
+    try {
+      if (typeof window !== "undefined" && window.localStorage.getItem("admin_gunungsari") === "ok") {
+        setIsLogin(true);
+      }
+    } catch {}
+  }, []);
+
+  const safeFetch = async (url) => {
+    try {
+      const res = await fetch(url, { cache: "no-store" });
+      const text = await res.text();
+      try {
+        const json = JSON.parse(text);
+        return Array.isArray(json) ? json : [];
+      } catch {
+        setMsg("Sheet return HTML, bukan JSON. Cek Deploy Anyone. Response: " + text.substring(0,100));
+        return [];
+      }
+    } catch (e) {
+      setMsg("Gagal fetch: " + e.message);
+      return [];
     }
-    setLoading(false);
   };
 
-  useEffect(()=>{
-    setMounted(true);
-    try{
-      const saved = window.localStorage.getItem("admin_gunungsari");
-      if(saved==="ok") setLogin(true);
-    }catch{}
-  },[]);
+  const loadData = async () => {
+    setMsg("Loading...");
+    const d1 = await safeFetch(GOOGLE_SHEET_URL + "?t=" + Date.now());
+    setAbsen(d1);
+    const d2 = await safeFetch(GOOGLE_SHEET_URL + "?action=devices&t=" + Date.now());
+    setDevices(d2);
+    setMsg(`Loaded: ${d1.length} absen, ${d2.length} device`);
+  };
 
-  useEffect(()=>{ if(login && mounted) load(); },[login, mounted]);
+  useEffect(() => {
+    if (isLogin && ready) loadData();
+  }, [isLogin, ready]);
 
-  const handleLogin = () => { 
-    if(passInput===ADMIN_PASSWORD){ 
-      setLogin(true); 
-      try{ window.localStorage.setItem("admin_gunungsari","ok"); }catch{}
-    } else alert("Password salah!"); 
+  const login = () => {
+    if (pass === ADMIN_PASSWORD) {
+      setIsLogin(true);
+      try { window.localStorage.setItem("admin_gunungsari", "ok"); } catch {}
+    } else {
+      alert("Password salah!");
+    }
+  };
+
+  const logout = () => {
+    try { window.localStorage.removeItem("admin_gunungsari"); } catch {}
+    setIsLogin(false);
+    setPass("");
   };
 
   const hapusDevice = async (deviceId, jabatan) => {
-    if(!window.confirm(`Hapus device ${jabatan} (${deviceId})? HP baru bisa daftar lagi.`)) return;
-    try{
-      await fetch(GOOGLE_SHEET_URL, {method:"POST", mode:"no-cors", body: JSON.stringify({action:"delete_device", deviceId})});
-      alert("✅ Device "+jabatan+" dihapus. Tunggu 3 detik lalu Refresh.");
-      setTimeout(()=>load(), 2000);
-    }catch(e){ alert("Gagal: "+e.message); }
+    if (!window.confirm(`Hapus ${jabatan}?`)) return;
+    setMsg("Menghapus...");
+    try {
+      await fetch(GOOGLE_SHEET_URL, { method: "POST", mode: "no-cors", body: JSON.stringify({ action: "delete_device", deviceId }) });
+      setMsg("Device dihapus, refresh 2 detik...");
+      setTimeout(loadData, 2500);
+    } catch (e) {
+      setMsg("Gagal hapus: " + e.message);
+    }
   };
 
-  const handleLogout = () => {
-    try{ window.localStorage.removeItem("admin_gunungsari"); }catch{}
-    setLogin(false);
-    setPassInput("");
-  };
+  if (!ready) return <div style={{padding:20}}>Loading...</div>;
 
-  if(!mounted) return <div style={{padding:20,fontFamily:"system-ui"}}>Loading admin...</div>;
-
-  if(!login){
-    return(<div style={{maxWidth:400,margin:"80px auto",padding:24,background:"white",borderRadius:16,boxShadow:"0 4px 20px rgba(0,0,0,0.1)",fontFamily:"system-ui",textAlign:"center"}}>
-      <h2>🔒 Admin Desa Gunungsari</h2>
-      <p style={{fontSize:12,color:"#666"}}>Masukkan password admin</p>
-      <input type="password" value={passInput} onChange={e=>setPassInput(e.target.value)} placeholder="Password" style={{width:"100%",padding:12,borderRadius:8,border:"1px solid #ccc",marginTop:12}}/>
-      <button onClick={handleLogin} style={{width:"100%",padding:12,background:"#111",color:"white",border:0,borderRadius:8,marginTop:12,fontWeight:"bold"}}>Masuk</button>
-      <p style={{fontSize:10,color:"#999",marginTop:12}}>Hubungi Kades jika lupa password</p>
-    </div>);
+  if (!isLogin) {
+    return (
+      <div style={{maxWidth:380,margin:"60px auto",padding:20,background:"#fff",borderRadius:12,boxShadow:"0 2px 10px #0001",fontFamily:"system-ui"}}>
+        <h2>🔒 Admin Gunungsari</h2>
+        <p style={{fontSize:12,color:"#666"}}>{msg}</p>
+        <input type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="Password" style={{width:"100%",padding:12,marginTop:10,borderRadius:8,border:"1px solid #ccc",boxSizing:"border-box"}}/>
+        <button onClick={login} style={{width:"100%",padding:12,marginTop:10,background:"#111",color:"#fff",border:0,borderRadius:8,fontWeight:"bold"}}>Masuk</button>
+        <p style={{fontSize:10,color:"#999",marginTop:10}}>Password: Ch@dast1936</p>
+      </div>
+    );
   }
 
-  const hariIni=new Date().toLocaleDateString("id-ID"); 
-  const dataHariIni=useMemo(()=>riwayat.filter(r=>r.tanggal===hariIni),[riwayat]);
-  const tampil = filter==="Semua"?riwayat:riwayat.filter(r=>r.nama===filter);
-  const stat={masuk:dataHariIni.filter(r=>r.tipe==="MASUK").length, pulang:dataHariIni.filter(r=>r.tipe==="PULANG").length, izinK:dataHariIni.filter(r=>r.tipe==="IZIN KEGIATAN").length, izinS:dataHariIni.filter(r=>r.tipe==="IZIN SAKIT").length};
+  const hariIni = new Date().toLocaleDateString("id-ID");
+  const dataHariIni = absen.filter(r=>r && r.tanggal===hariIni);
+  const tampil = filter==="Semua" ? absen : absen.filter(r=>r && r.nama===filter);
 
-  return(<div style={{maxWidth:1100,margin:"0 auto",padding:16,fontFamily:"system-ui",background:"#f8fafc",minHeight:"100vh"}}>
-    <div style={{background:"#111",color:"white",padding:20,borderRadius:16,display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:10}}>
-      <div><h2 style={{margin:0}}>Admin ONLINE</h2><p style={{margin:"4px 0 0",fontSize:11,opacity:0.7}}>{riwayat.length} absen • {devices.length} device</p></div>
-      <div style={{display:"flex",gap:8}}><button onClick={load} style={{padding:"10px 14px",background:"white",color:"#111",border:0,borderRadius:10,fontSize:12,fontWeight:"bold"}}>{loading?"...":"🔄 Refresh"}</button><button onClick={handleLogout} style={{padding:"10px 14px",background:"#dc2626",color:"white",border:0,borderRadius:10,fontSize:12}}>Logout</button><a href="/" style={{padding:"10px 14px",background:"#22c55e",color:"white",borderRadius:10,fontSize:12,textDecoration:"none",fontWeight:"bold"}}>Absen</a></div>
+  return (
+    <div style={{maxWidth:1000,margin:"0 auto",padding:12,fontFamily:"system-ui",background:"#f8fafc",minHeight:"100vh"}}>
+      <div style={{background:"#111",color:"#fff",padding:16,borderRadius:12,display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
+        <div><b>Admin Gunungsari</b><br/><span style={{fontSize:11,opacity:0.7}}>{msg}</span></div>
+        <div style={{display:"flex",gap:6}}>
+          <button onClick={loadData} style={{padding:"8px 12px",background:"#fff",color:"#111",border:0,borderRadius:8,fontSize:12}}>🔄 Refresh</button>
+          <button onClick={logout} style={{padding:"8px 12px",background:"#dc2626",color:"#fff",border:0,borderRadius:8,fontSize:12}}>Logout</button>
+          <a href="/" style={{padding:"8px 12px",background:"#22c55e",color:"#fff",borderRadius:8,fontSize:12,textDecoration:"none"}}>Absen</a>
+        </div>
+      </div>
+
+      <div style={{background:"#fff",border:"2px solid #111",padding:12,borderRadius:12,marginTop:12}}>
+        <b style={{fontSize:13}}>📱 Device Terdaftar (Bisa Hapus Jarak Jauh)</b>
+        <div style={{marginTop:10,display:"grid",gap:6}}>
+          {devices.length===0 ? <p style={{fontSize:12,color:"#999"}}>Belum ada device / gagal load Sheet Devices. Buat tab Devices di Sheet.</p> : devices.map(d=>(
+            <div key={d.deviceId} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:8,background:"#f8fafc",borderRadius:6,border:"1px solid #eee"}}>
+              <div><b style={{fontSize:12}}>{d.jabatan||d.nama||"Unknown"}</b><br/><span style={{fontSize:10,color:"#666"}}>{d.deviceId}</span></div>
+              <button onClick={()=>hapusDevice(d.deviceId, d.jabatan)} style={{padding:"6px 10px",background:"#dc2626",color:"#fff",border:0,borderRadius:6,fontSize:11}}>Hapus</button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:12}}>
+        <div style={{background:"#fff",padding:12,borderRadius:10}}><div style={{fontSize:11}}>MASUK Hari Ini</div><div style={{fontSize:24,fontWeight:"bold",color:"#16a34a"}}>{dataHariIni.filter(r=>r.tipe==="MASUK").length}</div></div>
+        <div style={{background:"#fff",padding:12,borderRadius:10}}><div style={{fontSize:11}}>TOTAL DATA</div><div style={{fontSize:24,fontWeight:"bold"}}>{absen.length}</div></div>
+      </div>
+
+      <div style={{marginTop:12}}>
+        <select value={filter} onChange={e=>setFilter(e.target.value)} style={{padding:8,borderRadius:6,border:"1px solid #ddd"}}>
+          <option value="Semua">Semua Jabatan</option>
+          <option value="Sekretaris Desa">Sekretaris Desa</option>
+          <option value="Kaur Keuangan">Kaur Keuangan</option>
+          <option value="Kaur TU dan Umum">Kaur TU dan Umum</option>
+          <option value="Kaur Perencanaan">Kaur Perencanaan</option>
+          <option value="Kasi Kesejahteraan">Kasi Kesejahteraan</option>
+          <option value="Kasi Pemerintahan">Kasi Pemerintahan</option>
+          <option value="Kasi Pelayanan">Kasi Pelayanan</option>
+          <option value="Kadus Desa">Kadus Desa</option>
+          <option value="Kadus Cikatomas">Kadus Cikatomas</option>
+          <option value="Kadus Cilopadang">Kadus Cilopadang</option>
+        </select>
+      </div>
+
+      <div style={{background:"#fff",borderRadius:10,marginTop:10,overflow:"hidden"}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+          <thead><tr style={{background:"#f1f5f9"}}><th style={{padding:8,textAlign:"left"}}>Jam</th><th style={{padding:8,textAlign:"left"}}>Nama</th><th style={{padding:8,textAlign:"left"}}>Tipe</th></tr></thead>
+          <tbody>
+            {tampil.length===0 ? <tr><td colSpan={3} style={{padding:20,textAlign:"center",color:"#999"}}>Tidak ada data</td></tr> : tampil.slice(0,100).map((r,i)=>(
+              <tr key={i} style={{borderBottom:"1px solid #f1f5f9"}}><td style={{padding:8}}>{r.jam}<br/><span style={{fontSize:10,color:"#888"}}>{r.tanggal}</span></td><td style={{padding:8}}>{r.nama}</td><td style={{padding:8}}>{r.tipe}<br/><span style={{fontSize:10}}>{r.keterangan||""}</span></td></tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div style={{marginTop:12,fontSize:10,color:"#666",background:"#fff",padding:10,borderRadius:8}}>
+        <b>Debug:</b> {msg}<br/>
+        URL: {GOOGLE_SHEET_URL}<br/>
+        Jika msg berisi HTML, berarti Deploy di Apps Script belum Anyone. Buka Apps Script → Deploy → Manage → Edit → Who has access = Anyone → New Version → Deploy.
+      </div>
     </div>
-
-    <div style={{background:"white",border:"2px solid #111",padding:16,borderRadius:14,marginTop:16}}>
-      <h3 style={{margin:"0 0 12px",fontSize:14}}>📱 Kelola Device (Hapus Jarak Jauh)</h3>
-      {loading?<p style={{fontSize:12}}>Loading...</p>:devices.length===0?<p style={{fontSize:12,color:"#999"}}>Belum ada device. Suruh staff pilih jabatan di halaman absen dulu.</p>:<div style={{display:"grid",gap:8}}>{devices.map(d=><div key={d.deviceId} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 12px",background:"#f8fafc",borderRadius:8,border:"1px solid #eee"}}><div><b style={{fontSize:12}}>{d.jabatan}</b><br/><span style={{fontSize:10,color:"#666"}}>{d.deviceId} • {String(d.tanggalDaftar||"").substring(0,20)}</span></div><button onClick={()=>hapusDevice(d.deviceId,d.jabatan)} style={{padding:"6px 12px",background:"#dc2626",color:"white",border:0,borderRadius:6,fontSize:11,fontWeight:"bold"}}>🗑️ Hapus</button></div>)}</div>}
-    </div>
-
-    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:10,marginTop:16}}>
-      <div style={{background:"white",padding:14,borderRadius:14}}><div style={{fontSize:11,color:"#666"}}>MASUK</div><div style={{fontSize:28,fontWeight:"bold",color:"#16a34a"}}>{stat.masuk}</div></div>
-      <div style={{background:"white",padding:14,borderRadius:14}}><div style={{fontSize:11,color:"#666"}}>PULANG</div><div style={{fontSize:28,fontWeight:"bold",color:"#dc2626"}}>{stat.pulang}</div></div>
-      <div style={{background:"white",padding:14,borderRadius:14}}><div style={{fontSize:11,color:"#666"}}>KEGIATAN</div><div style={{fontSize:28,fontWeight:"bold",color:"#f59e0b"}}>{stat.izinK}</div></div>
-      <div style={{background:"white",padding:14,borderRadius:14}}><div style={{fontSize:11,color:"#666"}}>SAKIT</div><div style={{fontSize:28,fontWeight:"bold",color:"#eab308"}}>{stat.izinS}</div></div>
-    </div>
-
-    <div style={{marginTop:16,display:"flex",gap:8}}><select value={filter} onChange={e=>setFilter(e.target.value)} style={{padding:"8px 12px",borderRadius:8,border:"1px solid #ddd",fontSize:12}}><option value="Semua">Semua ({riwayat.length})</option>{DAFTAR_JABATAN.map(j=><option key={j} value={j}>{j}</option>)}</select></div>
-
-    <div style={{background:"white",borderRadius:14,marginTop:12,overflow:"hidden"}}>
-      <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead><tr style={{background:"#f8fafc"}}><th style={{padding:12,textAlign:"left"}}>Waktu</th><th style={{padding:12,textAlign:"left"}}>Jabatan</th><th style={{padding:12,textAlign:"left"}}>Tipe</th><th style={{padding:12,textAlign:"left"}}>Ket</th></tr></thead><tbody>{tampil.length===0?<tr><td colSpan={4} style={{padding:20,textAlign:"center",color:"#999"}}>Belum ada data</td></tr>:tampil.map((r,i)=><tr key={i} style={{borderBottom:"1px solid #f1f5f9"}}><td style={{padding:10}}>{r.jam}<br/><span style={{fontSize:10,color:"#888"}}>{r.tanggal}</span></td><td style={{padding:10}}><b>{r.nama}</b></td><td style={{padding:10}}>{r.tipe}</td><td style={{padding:10}}>{r.keterangan||"-"}</td></tr>)}</tbody></table></div>
-    </div>
-  </div>);
+  );
 }
