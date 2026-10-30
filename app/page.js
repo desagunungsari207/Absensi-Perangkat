@@ -1,80 +1,61 @@
 "use client";
 import { useState, useEffect } from "react";
+const BALAI_DESA = { lat: -7.259344564316639, lng: 108.31042899681555, radius: 50 };
+const DAFTAR_JABATAN = [
+  "Sekretaris Desa", "Kaur Keuangan", "Kaur TU dan Umum", "Kaur Perencanaan",
+  "Kasi Kesejahteraan", "Kasi Pemerintahan", "Kasi Pelayanan",
+  "Kadus Desa", "Kadus Cikatomas", "Kadus Cilopadang"
+];
 
-const BALAI_DESA = {
-  lat: -7.259344564316639,
-  lng: 108.31042899681555,
-  radius: 50, // 50 meter dari Balai Desa Gunungsari
-};
+function getDistance(a,b,c,d){const R=6371e3;const dLat=(c-a)*Math.PI/180;const dLon=(d-b)*Math.PI/180;const x=Math.sin(dLat/2)**2+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(dLon/2)**2;return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));}
 
-const PERANGKAT = ["Kades", "Sekdes", "Kaur Keuangan", "Kaur Umum", "Kasi Pemerintahan", "Kasi Kesra", "Kasi Pelayanan", "Operator Desa", "Kadus 1", "Kadus 2", "Kadus 3"];
+export default function AbsensiGunungsari(){
+  const [nama,setNama]=useState("");const [terkunci,setTerkunci]=useState(false);const [jarak,setJarak]=useState(null);const [riwayat,setRiwayat]=useState([]);const [view,setView]=useState("absen");
 
-function getDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371e3;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-}
+  useEffect(()=>{
+    const device = localStorage.getItem("device_gunungsari");
+    if(device){ setNama(device); setTerkunci(true); }
+    setRiwayat(JSON.parse(localStorage.getItem("absensi_gunungsari")||"[]"));
+    navigator.geolocation.getCurrentPosition(p=>setJarak(Math.round(getDistance(p.coords.latitude,p.coords.longitude,BALAI_DESA.lat,BALAI_DESA.lng))),()=>{}, {enableHighAccuracy:true});
+  },[]);
 
-export default function AbsensiGunungsari() {
-  const [nama, setNama] = useState("");
-  const [jarak, setJarak] = useState(null);
-  const [riwayat, setRiwayat] = useState([]);
-
-  useEffect(() => {
-    const saved = JSON.parse(localStorage.getItem("absensi_gunungsari") || "[]");
-    setRiwayat(saved);
-    cekGPS();
-  }, []);
-
-  const cekGPS = () => {
-    navigator.geolocation.getCurrentPosition(pos => {
-      const d = getDistance(pos.coords.latitude, pos.coords.longitude, BALAI_DESA.lat, BALAI_DESA.lng);
-      setJarak(Math.round(d));
-    }, () => alert("Aktifkan GPS & Lokasi Akurat!"), { enableHighAccuracy: true });
+  const cekGPS=()=>navigator.geolocation.getCurrentPosition(p=>setJarak(Math.round(getDistance(p.coords.latitude,p.coords.longitude,BALAI_DESA.lat,BALAI_DESA.lng))),()=>alert("Aktifkan GPS"),{enableHighAccuracy:true});
+  
+  const kunciDevice=(namaPilih)=>{
+    if(!namaPilih) return;
+    if(confirm(`Kunci HP ini untuk "${namaPilih}"? HP ini nanti tidak bisa dipakai untuk jabatan lain.`)){
+      localStorage.setItem("device_gunungsari", namaPilih);
+      setNama(namaPilih); setTerkunci(true);
+    } else { setNama(""); }
   };
 
-  const absen = (tipe) => {
-    if (!nama) return alert("Pilih nama dulu!");
-    if (jarak > BALAI_DESA.radius) return alert(`Gagal! Anda di luar area. Jarak ${jarak}m dari balai`);
-    const data = { nama, tipe, jam: new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" }), jarak };
-    const baru = [data, ...riwayat];
-    setRiwayat(baru);
-    localStorage.setItem("absensi_gunungsari", JSON.stringify(baru));
-    alert(`${tipe} Berhasil - ${nama}`);
+  const hariIni=new Date().toLocaleDateString("id-ID");
+  const absenHariIni=riwayat.filter(r=>r.nama===nama&&r.tanggal===hariIni);
+  const sudahMasuk=absenHariIni.some(r=>r.tipe==="MASUK");const sudahPulang=absenHariIni.some(r=>r.tipe==="PULANG");
+
+  const absen=(tipe)=>{
+    if(!nama)return alert("Pilih jabatan!");if(jarak>BALAI_DESA.radius)return alert(`Di luar area ${jarak}m`);
+    if(tipe==="MASUK"&&sudahMasuk)return alert("Sudah MASUK hari ini!");if(tipe==="PULANG"&&sudahPulang)return alert("Sudah PULANG!");if(tipe==="PULANG"&&!sudahMasuk)return alert("Harus MASUK dulu!");
+    const data={nama,tipe,jam:new Date().toLocaleTimeString("id-ID"),tanggal:hariIni,tanggalFull:new Date().toLocaleString("id-ID"),jarak};
+    const baru=[data,...riwayat];setRiwayat(baru);localStorage.setItem("absensi_gunungsari",JSON.stringify(baru));setView("statistik");
   };
 
-  const diArea = jarak !== null && jarak <= BALAI_DESA.radius;
+  const diArea=jarak!==null&&jarak<=BALAI_DESA.radius;const riwayatSaya=riwayat.filter(r=>r.nama===nama);
 
-  return (
-    <div style={{ maxWidth: 420, margin: "0 auto", padding: 20, fontFamily: "system-ui" }}>
-      <h2 style={{ marginBottom: 4 }}>Absensi Desa Gunungsari</h2>
-      <p style={{ fontSize: 12, color: "#666", marginTop: 0 }}>Kec. Sadananya - GPS 50m dari Balai Desa</p>
-      
-      <select value={nama} onChange={e=>setNama(e.target.value)} style={{ width: "100%", padding: 14, margin: "15px 0 10px", borderRadius: 8, border: "1px solid #ccc" }}>
-        <option value="">-- Pilih Nama Perangkat --</option>
-        {PERANGKAT.map(p=> <option key={p} value={p}>{p}</option>)}
-      </select>
+  if(view==="statistik"&&nama){
+    return(<div style={{maxWidth:420,margin:"0 auto",padding:20,fontFamily:"system-ui"}}><h2>Statistik {nama}</h2><p style={{fontSize:12}}>Device ini terkunci untuk {nama}</p><div style={{background:"#f0fdf4",padding:14,borderRadius:10,margin:"15px 0"}}>Hari ini: MASUK {sudahMasuk?"✅":"❌"} | PULANG {sudahPulang?"✅":"❌"}<br/>Total: {riwayatSaya.length} kali</div>{riwayatSaya.map((r,i)=><div key={i} style={{padding:"8px 0",borderBottom:"1px solid #eee",fontSize:13}}>{r.tanggal} {r.jam} - {r.tipe} ({r.jarak}m)</div>)}<button onClick={()=>setView("absen")} style={{width:"100%",marginTop:20,padding:14,background:"#111",color:"white",borderRadius:10}}>← Kembali Absen</button></div>);
+  }
 
-      <div style={{ padding: 14, background: diArea ? "#dcfce7" : "#fee2e2", borderRadius: 10, marginBottom: 15, border: `1px solid ${diArea ? "#86efac" : "#fca5a5"}` }}>
-        <div style={{ fontWeight: "bold" }}>Jarak dari Balai: {jarak !== null ? `${jarak} m` : "Mengecek GPS..."}</div>
-        <div style={{ fontSize: 14, marginTop: 4 }}>{jarak===null ? "Aktifkan GPS..." : diArea ? "✅ Di Dalam Area - Boleh Absen" : "❌ Di Luar Area 50m"}</div>
-        <button onClick={cekGPS} style={{ marginTop: 10, padding: "6px 12px", fontSize: 12, borderRadius: 6, border: "1px solid #ccc", background: "white" }}>🔄 Refresh GPS</button>
-      </div>
-
-      <div style={{ display: "flex", gap: 12 }}>
-        <button disabled={!diArea || !nama} onClick={()=>absen("MASUK")} style={{ flex:1, padding: 16, background: diArea && nama ? "#16a34a" : "#9ca3af", color: "white", border: 0, borderRadius: 10, fontWeight: "bold", fontSize: 16 }}>MASUK</button>
-        <button disabled={!diArea || !nama} onClick={()=>absen("PULANG")} style={{ flex:1, padding: 16, background: diArea && nama ? "#dc2626" : "#9ca3af", color: "white", border: 0, borderRadius: 10, fontWeight: "bold", fontSize: 16 }}>PULANG</button>
-      </div>
-
-      <h3 style={{ marginTop: 25, fontSize: 16 }}>📋 Riwayat Hari Ini</h3>
-      <div style={{ maxHeight: 300, overflowY: "auto" }}>
-        {riwayat.length === 0 && <div style={{ fontSize: 14, color: "#999" }}>Belum ada absen</div>}
-        {riwayat.map((r,i)=> <div key={i} style={{ borderBottom: "1px solid #f0f0f0", padding: "10px 0", fontSize: 13 }}><b>{r.nama}</b> - {r.tipe} <br/><span style={{ color: "#666" }}>{r.jam} • {r.jarak}m dari balai</span></div>)}
-      </div>
-      
-      <button onClick={()=>{ if(confirm("Hapus semua riwayat?")) { setRiwayat([]); localStorage.removeItem("absensi_gunungsari"); } }} style={{ marginTop: 20, fontSize: 12, color: "#999", background: "none", border: 0, textDecoration: "underline" }}>Hapus Riwayat</button>
-    </div>
-  );
+  return(<div style={{maxWidth:420,margin:"0 auto",padding:20,fontFamily:"system-ui"}}><h2>Absensi Desa Gunungsari</h2><p style={{fontSize:12,color:"#666"}}>1 Device = 1 Jabatan • GPS 50m • {hariIni}</p>
+    {!terkunci ? (
+      <select value={nama} onChange={e=>kunciDevice(e.target.value)} style={{width:"100%",padding:14,borderRadius:8,margin:"15px 0 10px",border:"2px solid #111"}}><option value="">-- Pilih Jabatan Anda (Sekali Kunci) --</option>{DAFTAR_JABATAN.map(p=><option key={p} value={p}>{p}</option>)}</select>
+    ) : (
+      <div style={{padding:12,background:"#111",color:"white",borderRadius:8,margin:"15px 0 10px",textAlign:"center"}}>🔒 HP ini: <b>{nama}</b><br/><span style={{fontSize:11}}>Terkunci 1 device 1 orang</span></div>
+    )}
+    {nama&&<div style={{fontSize:12,padding:8,background:"#f3f4f6",borderRadius:6,marginBottom:10}}>Status: MASUK {sudahMasuk?"✅":"❌"} | PULANG {sudahPulang?"✅":"❌"}</div>}
+    <div style={{padding:14,background:diArea?"#dcfce7":"#fee2e2",borderRadius:10,marginBottom:15}}><b>{jarak!==null?`${jarak}m dari Balai`:"Cek GPS..."}</b> - {diArea?"✅ Di Area":"❌ Di Luar"}<br/><button onClick={cekGPS} style={{marginTop:8,fontSize:12}}>🔄 Refresh GPS</button></div>
+    <div style={{display:"flex",gap:12}}><button disabled={!diArea||!nama||sudahMasuk} onClick={()=>absen("MASUK")} style={{flex:1,padding:16,background:sudahMasuk?"#9ca3af":diArea&&nama?"#16a34a":"#9ca3af",color:"white",border:0,borderRadius:10,fontWeight:"bold"}}>{sudahMasuk?"SUDAH MASUK":"MASUK"}</button><button disabled={!diArea||!nama||sudahPulang||!sudahMasuk} onClick={()=>absen("PULANG")} style={{flex:1,padding:16,background:sudahPulang?"#9ca3af":diArea&&nama&&sudahMasuk?"#dc2626":"#9ca3af",color:"white",border:0,borderRadius:10,fontWeight:"bold"}}>{sudahPulang?"SUDAH PULANG":"PULANG"}</button></div>
+    {terkunci&&<button onClick={()=>setView("statistik")} style={{width:"100%",marginTop:12,padding:10,background:"white",border:"1px solid #ddd",borderRadius:8}}>📊 Lihat Statistik Saya</button>}
+    <p style={{fontSize:10,color:"#999",marginTop:20,textAlign:"center"}}>Jika salah pilih, hubungi admin untuk reset device di /admin</p>
+  </div>);
 }
